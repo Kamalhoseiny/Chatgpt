@@ -1,0 +1,65 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip openjdk-17-jdk \
+          autoconf libtool pkg-config \
+          zlib1g-dev libncurses5-dev libncursesw5-dev \
+          cmake libffi-dev libssl-dev
+
+      - name: Cache Buildozer
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-cache-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-cache-
+
+      - name: Install Buildozer
+        run: |
+          python -m pip install --upgrade pip
+          pip install buildozer cython==0.29.36
+
+      # مرحله نهایی: استفاده از SDK پیش‌فرض گیت‌هاب و نصب پکیج‌های مورد نیاز
+      - name: Setup Android SDK
+        run: |
+          # SDK پیش‌فرض گیت‌هاب در این مسیر است
+          SDK_ROOT=/usr/local/lib/android/sdk
+          
+          # مسیر sdkmanager در SDK پیش‌فرض
+          export PATH=$PATH:$SDK_ROOT/cmdline-tools/latest/bin:$SDK_ROOT/tools/bin
+          
+          # پذیرش لایسنس‌ها و نصب پکیج‌های مورد نیاز Buildozer
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+
+      - name: Build APK
+        run: |
+          echo y | buildozer -v android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mks-android-apk
+          path: bin/*.apk
+          if-no-files-found: error
